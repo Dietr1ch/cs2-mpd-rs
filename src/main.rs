@@ -1,6 +1,10 @@
+extern crate dotenv;
+#[macro_use]
+extern crate dotenv_codegen;
 extern crate mpd;
 
 use actix_web::{web, App, HttpResponse, HttpServer};
+use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 
 // CS:GO JSON
@@ -23,24 +27,23 @@ struct CsgoData {
     round: RoundData,
 }
 
-fn try_play_or_pause(game_data: &CsgoData) -> Result<(), mpd::error::Error> {
-    let mut conn = mpd::Client::connect("127.0.0.1:6600")?;
+enum MpdState {
+    Play,
+    Pause,
+}
+fn set_mpd(state: MpdState) -> Result<(), mpd::error::Error> {
+    let env_mpd_address: &str = dotenv!("MPD_ADDRESS");
+    let mut conn = mpd::Client::connect(env_mpd_address)?;
 
-    match game_data.round.phase.as_ref() {
-        "freezetime" | "warmup" => {
+    match state {
+        MpdState::Play => {
             println!("Playing");
             conn.play()?;
             conn.pause(false)?;
         }
-        _ => {
-            if game_data.player.state.health <= 0 {
-                println!("Playing");
-                conn.play()?;
-                conn.pause(false)?;
-            } else {
-                println!("Pausing");
-                conn.pause(true)?;
-            }
+        MpdState::Pause => {
+            println!("Pausing");
+            conn.pause(true)?;
         }
     }
 
@@ -48,16 +51,31 @@ fn try_play_or_pause(game_data: &CsgoData) -> Result<(), mpd::error::Error> {
     Ok(())
 }
 
-fn play_or_pause(game_data: &CsgoData) {
-    match game_data.player.steamid.as_ref() {
-        "my_steam_id" => match try_play_or_pause(game_data) {
-            Ok(_) => {}
-            _ => {
-                println!("Oh, no.");
-            }
-        },
+fn try_play_or_pause(game_data: &CsgoData) -> Result<(), mpd::error::Error> {
+    match game_data.round.phase.as_ref() {
+        "freezetime" | "warmup" => set_mpd(MpdState::Play),
         _ => {
-            println!("Who's {:?}?", game_data.player.steamid);
+            if game_data.player.state.health <= 0 {
+                set_mpd(MpdState::Play)
+            } else {
+                set_mpd(MpdState::Pause)
+            }
+        }
+    }
+}
+
+fn play_or_pause(game_data: &CsgoData) {
+    let env_steam_id: &str = dotenv!("STEAM_ID");
+
+    if game_data.player.steamid.as_str() != env_steam_id {
+        println!("Who's {:?}?", game_data.player.steamid);
+        return;
+    }
+
+    match try_play_or_pause(game_data) {
+        Ok(_) => {}
+        _ => {
+            println!("Oh, no.");
         }
     }
 }
@@ -71,6 +89,8 @@ async fn index(game_data: web::Json<CsgoData>) -> HttpResponse {
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok().unwrap();
+
     HttpServer::new(|| {
         App::new() //
             .service(web::resource("/").route(web::post().to(index)))
