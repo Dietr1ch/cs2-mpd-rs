@@ -1,39 +1,20 @@
+mod csgo_data;
+
 extern crate dotenv;
 #[macro_use]
 extern crate dotenv_codegen;
 extern crate mpd;
 
 use actix_web::{web, App, HttpResponse, HttpServer};
+use csgo_data::CsgoData;
 use dotenv::dotenv;
-use serde::{Deserialize, Serialize};
-
-// CS:GO JSON
-#[derive(Debug, Serialize, Deserialize)]
-struct PlayerState {
-    health: i32,
-}
-#[derive(Debug, Serialize, Deserialize)]
-struct PlayerData {
-    steamid: String,
-    state: PlayerState,
-}
-#[derive(Debug, Serialize, Deserialize)]
-struct RoundData {
-    phase: String,
-}
-#[derive(Debug, Serialize, Deserialize)]
-struct CsgoData {
-    player: PlayerData,
-    round: RoundData,
-}
 
 enum MpdState {
     Play,
     Pause,
 }
 fn set_mpd(state: MpdState) -> Result<(), mpd::error::Error> {
-    let env_mpd_address: &str = dotenv!("MPD_ADDRESS");
-    let mut conn = mpd::Client::connect(env_mpd_address)?;
+    let mut conn = mpd::Client::connect(dotenv!("MPD_ADDRESS"))?;
 
     match state {
         MpdState::Play => {
@@ -90,6 +71,9 @@ async fn index(game_data: web::Json<CsgoData>) -> HttpResponse {
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok().unwrap();
+
+    println!("MPD_ADDRESS: {}", dotenv!("MPD_ADDRESS"));
+    println!("STEAM_ID: {}", dotenv!("STEAM_ID"));
 
     HttpServer::new(|| {
         App::new() //
