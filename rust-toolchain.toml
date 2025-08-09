@@ -1,0 +1,11 @@
+[toolchain]
+channel = "nightly"
+# See `rustup component list`
+components = [
+    "clippy",
+    "rust-analyzer",
+    "rust-docs",
+    "rust-src",
+    "rustfmt",
+    "llvm-tools-preview",
+]
