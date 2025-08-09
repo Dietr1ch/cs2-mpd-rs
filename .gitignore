@@ -3,3 +3,5 @@
 !data/.local
 !.gitignore
 !.env.sample
+
+!.rustfmt.toml
