@@ -57,7 +57,6 @@
 
               llvmPackages.bintools
               llvmPackages.bolt
-              mold
               rustc
               cargo
               rustup

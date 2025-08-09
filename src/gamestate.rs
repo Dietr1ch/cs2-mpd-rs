@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-// CS:GO JSON
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlayerState {
     pub health: i32,
@@ -15,7 +14,7 @@ pub struct RoundData {
     pub phase: String,
 }
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CsgoData {
+pub struct GameData {
     pub player: PlayerData,
     pub round: RoundData,
 }
