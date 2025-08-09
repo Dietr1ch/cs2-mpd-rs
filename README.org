@@ -1,0 +1,34 @@
+* CS2-MPD server
+Tiny server that listens to CS2 game updates and pauses MPD while in-game.
+
+So far it plays/pauses music while dead/alive, which is just demo-quality as it
+isn't a great experience after all.
+Ideally you'd play keep playing music early in the round, and be wary of
+teammates left alive.
+
+** Setup
+*** CS2 game state integration
+Set up CS2 to reach out to our server with some state changes,
+
+Write this into [[~/.local/share/Steam/steamapps/common/Counter-Strike Global Offensive/game/csgo/cfg/gamestate_integration_cs2-mpd.cfg]]
+
+#+begin_src cfg
+  "cs2-mpd-rs" {
+  	"uri" "http://127.0.0.1:3000"
+  	"timeout" "0.5"
+  	"buffer"  "0.1"
+  	"throttle" "0.5"
+  	"heartbeat" "60.0"
+
+  	"data" {
+  		"player_id"    "1"  // steamid
+  		"player_state" "1"  // armor, flashed, equip_value, health, etc.
+  		"round"        "1"  // round phase and the winning team
+  	}
+  }
+#+end_src
+
+* References
+** CS2
+*** Game state integration
+- https://github.com/antonpup/CounterStrike2GSI
