@@ -29,11 +29,21 @@ pub struct Args {
 
 #[derive(Debug)]
 struct MusicPlayer {
+	address: String,
 	mpd: mpd::Client,
 	last_state: Option<mpd::State>,
 }
 
 impl MusicPlayer {
+	fn reset(&mut self) -> Result<(), mpd::error::Error> {
+		tracing::info!("Reconnecting to MPD...");
+		self.last_state = None;
+		self.mpd = mpd::Client::connect(&self.address)?;
+		self.last_state = Some(self.mpd.status()?.state);
+		tracing::info!("Current state: {:?}", self.last_state);
+		Ok(())
+	}
+
 	fn set_state(&mut self, state: mpd::State) -> Result<(), mpd::error::Error> {
 		if let Some(last_state) = &self.last_state
 			&& last_state == &state
@@ -75,7 +85,17 @@ impl AppState {
 
 	fn set_music(&self, music_state: mpd::State) -> Result<(), mpd::error::Error> {
 		let mut music_player = self.music_player.lock().unwrap();
-		music_player.set_state(music_state)
+		match music_player.set_state(music_state) {
+			Ok(_) => Ok(()),
+			Err(mpd::error::Error::Io(io_err)) => {
+				tracing::error!("MPD call failed with IO error: {io_err:?}");
+				music_player.reset()
+			}
+			Err(e) => {
+				tracing::error!("MPD call failed: {e:?}");
+				Err(e)
+			}
+		}
 	}
 
 	fn play_or_pause(&self, game_data: &GameData) {
@@ -143,6 +163,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 
 	let state = AppState {
 		music_player: Arc::new(Mutex::new(MusicPlayer {
+			address: args.mpd_address.to_string(),
 			mpd: mpd::Client::connect(&args.mpd_address).wrap_err(format!(
 				"Couldn't connect to MPD server at {address}",
 				address = &args.mpd_address,
