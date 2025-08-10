@@ -1,22 +1,22 @@
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MpdState {
-	Play,
-	Pause,
-}
-
-pub fn set_mpd(mpd: &mut mpd::Client, state: MpdState) -> Result<(), mpd::error::Error> {
+pub fn set_mpd(mpd: &mut mpd::Client, state: mpd::State) -> Result<mpd::Status, mpd::error::Error> {
 	match state {
-		MpdState::Play => {
+		mpd::State::Play => {
 			tracing::info!("Playing music");
 			mpd.play()?;
 			mpd.pause(false)?;
 		}
-		MpdState::Pause => {
+		mpd::State::Pause => {
 			tracing::info!("Pausing music");
 			mpd.pause(true)?;
 		}
+		mpd::State::Stop => {
+			tracing::info!("Stopping music");
+			mpd.stop()?;
+		}
 	}
 
-	tracing::info!("Status: {:?}", mpd.status());
-	Ok(())
+	let status = mpd.status()?;
+	tracing::info!("New MPD status: {status:?}");
+
+	Ok(status)
 }

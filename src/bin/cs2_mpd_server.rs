@@ -7,7 +7,6 @@ use clap::Parser;
 use color_eyre::eyre::WrapErr;
 
 use cs2_mpd_rs::gamestate::GameData;
-use cs2_mpd_rs::music::MpdState;
 
 /// Command line arguments
 #[derive(Parser, Debug)]
@@ -31,19 +30,20 @@ pub struct Args {
 #[derive(Debug)]
 struct MusicPlayer {
 	mpd: mpd::Client,
-	last_state: Option<MpdState>,
+	last_state: Option<mpd::State>,
 }
 
 impl MusicPlayer {
-	fn set_state(&mut self, state: MpdState) -> Result<(), mpd::error::Error> {
+	fn set_state(&mut self, state: mpd::State) -> Result<(), mpd::error::Error> {
 		if let Some(last_state) = &self.last_state
 			&& last_state == &state
 		{
 			return Ok(());
 		}
 
-		self.last_state = Some(state);
-		cs2_mpd_rs::music::set_mpd(&mut self.mpd, state)
+		let status = cs2_mpd_rs::music::set_mpd(&mut self.mpd, state)?;
+		self.last_state = Some(status.state);
+		Ok(())
 	}
 }
 
@@ -54,9 +54,8 @@ struct AppState {
 }
 
 impl AppState {
-	fn desired_state(&self, game_data: &GameData) -> MpdState {
+	fn desired_state(&self, game_data: &GameData) -> mpd::State {
 		use cs2_mpd_rs::gamestate::RoundPhase;
-		use cs2_mpd_rs::music::MpdState;
 
 		if let Some(round) = &game_data.round
 			// Round live
@@ -68,13 +67,13 @@ impl AppState {
 			// Alive
 			&& state.health > 0
 		{
-			MpdState::Pause
+			mpd::State::Pause
 		} else {
-			MpdState::Play
+			mpd::State::Play
 		}
 	}
 
-	fn set_music(&self, music_state: MpdState) -> Result<(), mpd::error::Error> {
+	fn set_music(&self, music_state: mpd::State) -> Result<(), mpd::error::Error> {
 		let mut music_player = self.music_player.lock().unwrap();
 		music_player.set_state(music_state)
 	}
