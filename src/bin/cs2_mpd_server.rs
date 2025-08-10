@@ -76,7 +76,11 @@ impl AppState {
 		match &game_data.player {
 			Some(player) => {
 				if player.steam_id.as_str() != self.steam_id {
-					tracing::info!("Who's {:?}?", player.steam_id);
+					tracing::info!(
+						"Who's {} ({})? Are you spectating?",
+						player.name,
+						player.steam_id
+					);
 					return;
 				}
 			}
