@@ -1,0 +1,12 @@
+# https://dystroy.org/bacon/config/
+
+default_job = "check"
+env.CARGO_TERM_COLOR = "always"
+
+[jobs.fmt]
+command = ["cargo", "fmt"]
+need_stdout = false
+
+[jobs.spellcheck]
+command = ["cargo", "spellcheck"]
+need_stdout = true
