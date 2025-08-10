@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct PlayerState {
 	pub health: u8,
 	pub armor: u8,
@@ -18,21 +18,23 @@ pub struct PlayerState {
 	pub money: u16,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum GameActivity {
 	Menu,
 	Playing,
+	#[serde(rename = "textinput")]
+	Typing,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Team {
 	T,
 	CT,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct PlayerData {
 	#[serde(rename = "steamid")]
 	pub steam_id: String,
@@ -47,20 +49,68 @@ pub struct PlayerData {
 	pub state: Option<PlayerState>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum RoundPhase {
 	Live,
 	FreezeTime,
 	WarmUp,
+	Over,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct RoundData {
 	pub phase: RoundPhase,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct GameData {
 	pub player: Option<PlayerData>,
 	pub round: Option<RoundData>,
+}
+
+#[cfg(test)]
+mod tests {
+	use googletest::prelude::*;
+	use indoc::indoc;
+
+	use super::*;
+
+	mod game_data {
+		use super::*;
+
+		#[test_log::test(gtest)]
+		fn parse_almost_empty() {
+			expect_that!(
+				serde_json::from_str::<GameData>("{}"),
+				ok(matches_pattern!(GameData {
+					player: none(),
+					round: none(),
+				}))
+			);
+		}
+
+		#[test_log::test(gtest)]
+		fn parse_nonempty() {
+			expect_that!(
+				serde_json::from_str::<GameData>(indoc! {r#"
+					{
+					  "player": {
+					    "steamid": "1234",
+					    "name": "n00b",
+					    "activity": "textinput"
+					  }
+					}
+				"#}),
+				ok(matches_pattern!(GameData {
+					player: some(pat!(PlayerData {
+						steam_id: "1234",
+						name: "n00b",
+						activity: &GameActivity::Typing,
+						..
+					})),
+					round: none(),
+				}))
+			);
+		}
+	}
 }
