@@ -28,9 +28,28 @@ pub struct Args {
 	pub game_path: PathBuf,
 }
 
+#[derive(Debug)]
+struct MusicPlayer {
+	mpd: mpd::Client,
+	last_state: Option<MpdState>,
+}
+
+impl MusicPlayer {
+	fn set_state(&mut self, state: MpdState) -> Result<(), mpd::error::Error> {
+		if let Some(last_state) = &self.last_state
+			&& last_state == &state
+		{
+			return Ok(());
+		}
+
+		self.last_state = Some(state);
+		cs2_mpd_rs::music::set_mpd(&mut self.mpd, state)
+	}
+}
+
 #[derive(Clone, Debug)]
 struct AppState {
-	mpd: Arc<Mutex<mpd::Client>>,
+	music_player: Arc<Mutex<MusicPlayer>>,
 	steam_id: String,
 }
 
@@ -56,8 +75,8 @@ impl AppState {
 	}
 
 	fn set_music(&self, music_state: MpdState) -> Result<(), mpd::error::Error> {
-		let mut mpd = self.mpd.lock().unwrap();
-		cs2_mpd_rs::music::set_mpd(&mut mpd, music_state)
+		let mut music_player = self.music_player.lock().unwrap();
+		music_player.set_state(music_state)
 	}
 
 	fn play_or_pause(&self, game_data: &GameData) {
@@ -124,12 +143,13 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	tracing::trace!("Args: {args:?}");
 
 	let state = AppState {
-		mpd: Arc::new(Mutex::new(
-			mpd::Client::connect(&args.mpd_address).wrap_err(format!(
+		music_player: Arc::new(Mutex::new(MusicPlayer {
+			mpd: mpd::Client::connect(&args.mpd_address).wrap_err(format!(
 				"Couldn't connect to MPD server at {address}",
-				address = &args.mpd_address
+				address = &args.mpd_address,
 			))?,
-		)),
+			last_state: None,
+		})),
 		steam_id: args.steam_id,
 	};
 
