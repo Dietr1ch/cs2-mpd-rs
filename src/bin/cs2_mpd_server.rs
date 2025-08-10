@@ -172,6 +172,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 			)
 			.service(cs2_event)
 	})
+	.workers(2)
 	.bind(args.listen_address)?
 	.run()
 	.await?;
