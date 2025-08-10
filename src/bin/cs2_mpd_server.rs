@@ -36,31 +36,53 @@ struct AppState {
 
 impl AppState {
 	fn try_play_or_pause(&self, game_data: &GameData) -> Result<(), mpd::error::Error> {
+		use cs2_mpd_rs::gamestate::RoundPhase;
 		use cs2_mpd_rs::music::MpdState;
 
-		let music_state = match game_data.round.phase.as_ref() {
-			"freezetime" | "warmup" => MpdState::Play,
-			_ => {
-				if game_data.player.state.health > 0 {
-					// Still alive
-					MpdState::Pause
-				} else {
-					// No longer alive
-					MpdState::Play
+		let music_state = match &game_data.round {
+			Some(round) => {
+				match round.phase {
+					RoundPhase::Live => {
+						match &game_data.player {
+							Some(player) => {
+								match &player.state {
+									Some(state) => {
+										if state.health > 0 {
+											// Still alive
+											MpdState::Pause
+										} else {
+											// No longer alive
+											MpdState::Play
+										}
+									}
+									// No PlayerState reported
+									None => MpdState::Play,
+								}
+							}
+							None => MpdState::Play,
+						}
+					}
+					_ => MpdState::Play,
 				}
 			}
+			None => MpdState::Play,
 		};
 
 		let mut mpd = self.mpd.lock().unwrap();
-		cs2_mpd_rs::music::set_mpd(&mut mpd, music_state)?;
-
-		Ok(())
+		cs2_mpd_rs::music::set_mpd(&mut mpd, music_state)
 	}
 
 	fn play_or_pause(&self, game_data: &GameData) {
-		if game_data.player.steamid.as_str() != self.steam_id {
-			tracing::info!("Who's {:?}?", game_data.player.steamid);
-			return;
+		match &game_data.player {
+			Some(player) => {
+				if player.steam_id.as_str() != self.steam_id {
+					tracing::info!("Who's {:?}?", player.steam_id);
+					return;
+				}
+			}
+			None => {
+				return;
+			}
 		}
 
 		tracing::debug!("Game data:\n{game_data:?}");
@@ -74,11 +96,32 @@ impl AppState {
 }
 
 #[actix_web::post("/")]
-async fn index(app_state: web::Data<AppState>, game_data: web::Json<GameData>) -> String {
+async fn cs2_event(app_state: web::Data<AppState>, game_data: web::Json<GameData>) -> String {
 	tracing::info!("model: {:?}", &game_data);
 	app_state.play_or_pause(&game_data);
 
 	format!("GameData: {game_data:?}\n\nAppState: {app_state:?}!")
+}
+
+// Sample JSON error handler
+// - https://github.com/actix/examples/blob/master/json/json-decode-error/src/main.rs
+fn json_error_handler(
+	err: actix_web::error::JsonPayloadError,
+	_req: &actix_web::HttpRequest,
+) -> actix_web::error::Error {
+	use actix_web::HttpResponse;
+	use actix_web::error::JsonPayloadError;
+
+	let error_message = format!("Bad JSON payload: {err}");
+	let resp = match &err {
+		JsonPayloadError::ContentType => HttpResponse::UnsupportedMediaType().body(error_message),
+		JsonPayloadError::Deserialize(json_err) if json_err.is_data() => {
+			HttpResponse::UnprocessableEntity().body(error_message)
+		}
+		_ => HttpResponse::BadRequest().body(error_message),
+	};
+
+	actix_web::error::InternalError::from_response(err, resp).into()
 }
 
 #[actix_web::main]
@@ -107,9 +150,17 @@ async fn main() -> color_eyre::eyre::Result<()> {
 
 	HttpServer::new(move || {
 		App::new()
-			.wrap(actix_web::middleware::Logger::default())
+			.wrap(actix_web::middleware::Logger::new(
+				"%a '%r' %s %b '%{Referer}i' '%{User-Agent}i' %T",
+			))
 			.app_data(web::Data::new(state.clone()))
-			.service(index)
+			// custom `Json` extractor configuration
+			.app_data(
+				web::JsonConfig::default()
+					// register error_handler for JSON extractors.
+					.error_handler(json_error_handler),
+			)
+			.service(cs2_event)
 	})
 	.bind(args.listen_address)?
 	.run()
