@@ -3,11 +3,11 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use actix_web::{App, HttpServer, web};
+use clap::Parser;
 use color_eyre::eyre::WrapErr;
 
 use cs2_mpd_rs::gamestate::GameData;
-
-use clap::Parser;
+use cs2_mpd_rs::music::MpdState;
 
 /// Command line arguments
 #[derive(Parser, Debug)]
@@ -35,39 +35,27 @@ struct AppState {
 }
 
 impl AppState {
-	fn try_play_or_pause(&self, game_data: &GameData) -> Result<(), mpd::error::Error> {
+	fn desired_state(&self, game_data: &GameData) -> MpdState {
 		use cs2_mpd_rs::gamestate::RoundPhase;
 		use cs2_mpd_rs::music::MpdState;
 
-		let music_state = match &game_data.round {
-			Some(round) => {
-				match round.phase {
-					RoundPhase::Live => {
-						match &game_data.player {
-							Some(player) => {
-								match &player.state {
-									Some(state) => {
-										if state.health > 0 {
-											// Still alive
-											MpdState::Pause
-										} else {
-											// No longer alive
-											MpdState::Play
-										}
-									}
-									// No PlayerState reported
-									None => MpdState::Play,
-								}
-							}
-							None => MpdState::Play,
-						}
-					}
-					_ => MpdState::Play,
-				}
-			}
-			None => MpdState::Play,
-		};
+		if let Some(round) = &game_data.round
+			// Round live
+			&& round.phase == RoundPhase::Live
+			// Active player
+			&& let Some(player) = &game_data.player
+			&& player.steam_id == self.steam_id
+			&& let Some(state) = &player.state
+			// Alive
+			&& state.health > 0
+		{
+			MpdState::Pause
+		} else {
+			MpdState::Play
+		}
+	}
 
+	fn set_music(&self, music_state: MpdState) -> Result<(), mpd::error::Error> {
 		let mut mpd = self.mpd.lock().unwrap();
 		cs2_mpd_rs::music::set_mpd(&mut mpd, music_state)
 	}
@@ -90,7 +78,9 @@ impl AppState {
 		}
 
 		tracing::debug!("Game data:\n{game_data:?}");
-		if let Err(e) = self.try_play_or_pause(game_data) {
+		let desired_music_state = self.desired_state(game_data);
+		tracing::debug!("Desired music state: {desired_music_state:?}");
+		if let Err(e) = self.set_music(desired_music_state) {
 			tracing::error!("Couldn't change MPD state; {e:?}");
 		}
 	}
