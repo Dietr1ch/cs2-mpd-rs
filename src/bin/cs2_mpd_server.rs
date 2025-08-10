@@ -86,11 +86,8 @@ impl AppState {
 		}
 
 		tracing::debug!("Game data:\n{game_data:?}");
-		match self.try_play_or_pause(game_data) {
-			Ok(_) => {}
-			_ => {
-				tracing::error!("Oh, no.");
-			}
+		if let Err(e) = self.try_play_or_pause(game_data) {
+			tracing::error!("Couldn't change MPD state; {e:?}");
 		}
 	}
 }
